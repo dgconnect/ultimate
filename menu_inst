@@ -1,0 +1,1338 @@
+#!/bin/bash
+[[ $1 != "" ]] && id="$1" || id="pt"
+barra="\033[1;34m =================================== \033[1;37m"
+_cores="./cores"
+_dr="./idioma"
+[[ "$(echo ${txt[0]})" = "" ]] && source idioma_geral
+
+#LISTA PORTAS
+mportas () {
+unset portas
+portas_var=$(lsof -V -i tcp -P -n | grep -v "ESTABLISHED" |grep -v "COMMAND" | grep "LISTEN")
+while read port; do
+var1=$(echo $port | awk '{print $1}') && var2=$(echo $port | awk '{print $9}' | awk -F ":" '{print $2}')
+[[ "$(echo -e $portas|grep "$var1 $var2")" ]] || portas+="$var1 $var2\n"
+done <<< "$portas_var"
+i=1
+echo -e "$portas"
+}
+
+#MEU IP
+fun_ip () {
+MEU_IP=$(ip addr | grep 'inet' | grep -v inet6 | grep -vE '127\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}' | grep -o -E '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}' | head -1)
+MEU_IP2=$(wget -qO- ipv4.icanhazip.com)
+[[ "$MEU_IP" != "$MEU_IP2" ]] && IP="$MEU_IP2" || IP="$MEU_IP"
+}
+
+#ETHOOL SSH
+fun_eth () {
+eth=$(ifconfig | grep -v inet6 | grep -v lo | grep -v 127.0.0.1 | grep "encap:Ethernet" | awk '{print $1}')
+    [[ $eth != "" ]] && {
+    echo -e "$barra"
+    echo -e "${cor[3]} Aplicar sistema para melhorar pacotes Ssh?"
+    echo -e "${cor[3]} Opção para usuários avançados"
+    echo -e "$barra"
+    read -p " [S/N]: " -e -i n sshsn
+           [[ "$sshsn" = @(s|S|y|Y) ]] && {
+           echo -e "${cor[1]} Correção de problemas de pacotes no SSH..."
+           echo -e "Qual a taxa RX"
+           echo -ne "[ 1 - 999999999 ]: "; read rx
+           [[ "$rx" = "" ]] && rx="999999999"
+           echo -e "Qual a taxa TX"
+           echo -ne "[ 1 - 999999999 ]: "; read tx
+           [[ "$tx" = "" ]] && tx="999999999"
+           apt-get install ethtool -y > /dev/null 2>&1
+           ethtool -G $eth rx $rx tx $tx > /dev/null 2>&1
+           }
+     echo -e "$barra"
+     }
+}
+
+#FUN_BAR
+fun_bar () {
+comando[0]="$1"
+comando[1]="$2"
+ (
+[[ -e $HOME/fim ]] && rm $HOME/fim
+${comando[0]} -y > /dev/null 2>&1
+${comando[1]} -y > /dev/null 2>&1
+touch $HOME/fim
+ ) > /dev/null 2>&1 &
+echo -ne "\033[1;33m ["
+while true; do
+   for((i=0; i<18; i++)); do
+   echo -ne "\033[1;31m##"
+   sleep 0.1s
+   done
+   [[ -e $HOME/fim ]] && rm $HOME/fim && break
+   echo -e "\033[1;33m]"
+   sleep 1s
+   tput cuu1
+   tput dl1
+   echo -ne "\033[1;33m ["
+done
+echo -e "\033[1;33m]\033[1;31m -\033[1;32m 100%\033[1;37m"
+}
+
+#INSTALADOR SQUID
+fun_squid  () {
+  if [[ -e /etc/squid/squid.conf ]]; then
+  var_squid="/etc/squid/squid.conf"
+  elif [[ -e /etc/squid3/squid.conf ]]; then
+  var_squid="/etc/squid3/squid.conf"
+  fi
+  #Reiniciando
+  service squid3 restart > /dev/null 2>&1
+  service squid restart > /dev/null 2>&1
+  [[ -e $var_squid ]] && {
+  echo -e "$barra\n\033[1;32m REMOVENDO SQUID\n$barra"
+  fun_bar "apt-get remove squid3 -y"
+  service squid stop > /dev/null 2>&1
+  service squid3 stop > /dev/null 2>&1
+  echo -e "$barra\n\033[1;32m Procedimento concluído\n$barra"
+  [[ -e $var_squid ]] && rm $var_squid
+  return 0
+  }
+#Instalar
+echo -e "$barra\n\033[1;32m INSTALADOR SQUID ADM-ULTIMATE\n$barra"
+fun_ip
+echo -ne "Confirme seu ip"; read -p ": " -e -i $IP ip
+echo -e "$barra\n Agora escolha as portas que deseja no Squid"
+echo -e "Escolha as portas em sequência, Exemplo: 80 8080 3128"
+echo -ne "Digite as portas: "; read portasx
+echo -e "$barra"
+totalporta=($portasx)
+unset PORT
+   for((i=0; i<${#totalporta[@]}; i++)); do
+        [[ $(mportas|grep "${totalporta[$i]}") = "" ]] && {
+        echo -e "\033[1;33m Porta escolhida:\033[1;32m ${totalporta[$i]} OK"
+        PORT+="${totalporta[$i]}\n"
+        } || {
+        echo -e "\033[1;33m Porta escolhida:\033[1;31m ${totalporta[$i]} FAIL"
+        }
+   done
+  [[ "$(echo -e $PORT)" = "" ]] && {
+  echo -e "\033[1;31m Nenhuma porta válida foi escolhida\033[0m"
+  return 1
+  }
+echo -e "$barra"
+echo -e "INSTALANDO SQUID"
+echo -e "$barra"
+fun_bar "apt-get install squid3 -y"
+echo -e "$barra"
+echo -e "INICIANDO CONFIGURAÇÃO"
+echo -e ".bookclaro.com.br/\n.claro.com.ar/\n.claro.com.br/\n.claro.com.co/\n.claro.com.ec/\n.claro.com.gt/\n.cloudfront.net/\n.claro.com.ni/\n.claro.com.pe/\n.claro.com.sv/\n.claro.cr/\n.clarocurtas.com.br/\n.claroideas.com/\n.claroideias.com.br/\n.claromusica.com/\n.clarosomdechamada.com.br/\n.clarovideo.com/\n.facebook.net/\n.facebook.com/\n.netclaro.com.br/\n.oi.com.br/\n.oimusica.com.br/\n.speedtest.net/\n.tim.com.br/\n.timanamaria.com.br/\n.vivo.com.br/\n.rdio.com/\n.compute-1.amazonaws.com/\n.portalrecarga.vivo.com.br/\n.vivo.ddivulga.com/\n.veek.com.br/\n.correios.com.br/\nportalrecarga.vivo.com.br/recarga/home\nd1n212ccp6ldpw.cloudfront.net\nsdp.vivo.com.br\nwww.portalsva2.vivo.com.br/captive-static/tarif-def/pd/index.html\nnavegue.vivo.com.br/pre\nportalrecarga.vivo.com.br/recarga\nhttp://portalrecarga.vivo.com.br/noCredit/vitrine/controle\nportalrecarga.vivo.com.br/controle/\nveek.com.br/\ncorreios.com.br/\nrecargavivoweb/m4u.com.br/mobile/recarga\nrecargavivoweb.m4u.com.br/mobile/login\nnavegue.vivo.com.br/controle/" > /etc/payloads
+echo -e "$barra\n\033[1;32m Agora escolha uma configuração para seu Proxy\n$barra"
+echo -e " |1| "Comum")"
+echo -e " |2| "Customizado") -\033[1;31m Usuário deve ajustar\033[1;37m\n$barra"
+read -p " [1/2]: " -e -i 1 proxy_opt
+unset var_squid
+if [[ -d /etc/squid ]]; then
+var_squid="/etc/squid/squid.conf"
+elif [[ -d /etc/squid3 ]]; then
+var_squid="/etc/squid3/squid.conf"
+fi
+if [[ "$proxy_opt" = @(02|2) ]]; then
+echo -e "#ConfiguracaoSquiD
+acl s dstdomain -i /?
+acl url1 dstdomain -i $ip
+acl url2 dstdomain -i 127.0.0.1
+acl url3 url_regex -i '/etc/payloads'
+acl url4 dstdomain -i localhost
+acl accept dstdomain -i GET
+acl accept dstdomain -i POST
+acl accept dstdomain -i OPTIONS
+acl accept dstdomain -i CONNECT
+acl accept dstdomain -i PUT
+acl HEAD dstdomain -i HEAD
+acl accept dstdomain -i TRACE
+acl accept dstdomain -i OPTIONS
+acl accept dstdomain -i PATCH
+acl accept dstdomain -i PROPATCH
+acl accept dstdomain -i DELETE
+acl accept dstdomain -i REQUEST
+acl accept dstdomain -i METHOD
+acl accept dstdomain -i NETDATA
+acl accept dstdomain -i MOVE
+acl all src 0.0.0.0/0
+http_access allow s
+http_access allow url1
+http_access allow url2
+http_access allow url3
+http_access allow url4
+http_access allow accept
+http_access allow HEAD
+http_access deny all
+# Request Headers Forcing
+request_header_access Allow allow all
+request_header_access Authorization allow all
+request_header_access WWW-Authenticate allow all
+request_header_access Proxy-Authorization allow all
+request_header_access Proxy-Authenticate allow all
+request_header_access Cache-Control allow all
+request_header_access Content-Encoding allow all
+request_header_access Content-Length allow all
+request_header_access Content-Type allow all
+request_header_access Date allow all
+request_header_access Expires allow all
+request_header_access Host allow all
+request_header_access If-Modified-Since allow all
+request_header_access Last-Modified allow all
+request_header_access Location allow all
+request_header_access Pragma allow all
+request_header_access Accept allow all
+request_header_access Accept-Charset allow all
+request_header_access Accept-Encoding allow all
+request_header_access Accept-Language allow all
+request_header_access Content-Language allow all
+request_header_access Mime-Version allow all
+request_header_access Retry-After allow all
+request_header_access Title allow all
+request_header_access Connection allow all
+request_header_access Proxy-Connection allow all
+request_header_access User-Agent allow all
+request_header_access Cookie allow all
+request_header_access All deny all
+# Response Headers Spoofing
+reply_header_access Via deny all
+reply_header_access X-Cache deny all
+reply_header_access X-Cache-Lookup deny all
+#portas" > $var_squid
+for pts in $(echo -e $PORT); do
+echo -e "http_port $pts" >> $var_squid
+done
+echo -e "
+#nome
+visible_hostname ADM-MANAGER
+via off
+forwarded_for off
+pipeline_prefetch off" >> $var_squid
+ else
+echo -e "#ConfiguracaoSquiD
+acl s dstdomain -i /?
+acl url1 dstdomain -i $ip
+acl url2 dstdomain -i 127.0.0.1
+acl url3 url_regex -i '/etc/payloads'
+acl url4 dstdomain -i localhost
+acl all src 0.0.0.0/0
+http_access allow s
+http_access allow url1
+http_access allow url2
+http_access allow url3
+http_access allow url4
+http_access deny all
+#portas" > $var_squid
+for pts in $(echo -e $PORT); do
+echo -e "http_port $pts" >> $var_squid
+done
+echo -e "
+#nome
+visible_hostname ADM-MANAGER
+via off
+forwarded_for off
+pipeline_prefetch off" >> $var_squid
+fi
+fun_eth
+echo -e "$barra\n \033[1;31m [ ! ] \033[1;33m REINICIANDO SERVIÇOS"
+squid3 -k reconfigure > /dev/null 2>&1
+squid -k reconfigure > /dev/null 2>&1
+service ssh restart > /dev/null 2>&1
+service squid3 restart > /dev/null 2>&1
+service squid restart > /dev/null 2>&1
+echo -e " \033[1;32m[OK]"
+echo -e "$barra\n ${cor[3]} SQUID CONFIGURADO\n$barra"
+mportas > /tmp/portz
+while read portas; do
+[[ $portas = "" ]] && break
+done < /tmp/portz
+#UFW
+for ufww in $(mportas|awk '{print $2}'); do
+ufw allow $ufww > /dev/null 2>&1
+done
+}
+
+fun_dropbear () {
+ [[ -e /etc/default/dropbear ]] && {
+ echo -e "$barra\n\033[1;32m  REMOVENDO DROPBEAR\n$barra"
+ fun_bar "apt-get remove dropbear -y"
+ echo -e "$barra\n\033[1;32m  Dropbear removido\n$barra"
+ [[ -e /etc/default/dropbear ]] && rm /etc/default/dropbear
+ user -k 443/tcp > /dev/null 2>&1
+ return 0
+ }
+echo -e "$barra\n\033[1;32m  INSTALADOR DROPBEAR ADM-ULTIMATE\n$barra"
+echo -e "DROPBEAR USA A PORTA 443\033[1;37m"
+echo -e "$barra"
+   [[ $(mportas|grep 443) != "" ]] && {
+   echo -e "\033[1;31m PORTA 443 EM USO\033[1;37m"
+   echo -e "\033[1;31m TENTE NOVAMENTE\033[1;37m"
+   fuser -k 443/tcp > /dev/null 2>&1
+   echo -e "$barra"
+   return 1
+   }
+sysvar=$(cat -n /etc/issue |grep 1 |cut -d' ' -f6,7,8 |sed 's/1//' |sed 's/      //' | grep -o Ubuntu)
+shells=$(cat /etc/shells|grep "/bin/false")
+[[ ! ${shells} ]] && echo -e "/bin/false" >> /etc/shells
+[[ "$sysvar" != "" ]] && {
+echo -e "Port 22
+Port 2466
+Protocol 2
+KeyRegenerationInterval 3600
+ServerKeyBits 1024
+SyslogFacility AUTH
+LogLevel INFO
+LoginGraceTime 120
+PermitRootLogin yes
+StrictModes yes
+RSAAuthentication yes
+PubkeyAuthentication yes
+IgnoreRhosts yes
+RhostsRSAAuthentication no
+HostbasedAuthentication no
+PermitEmptyPasswords no
+ChallengeResponseAuthentication no
+PasswordAuthentication yes
+X11Forwarding yes
+X11DisplayOffset 10
+PrintMotd no
+PrintLastLog yes
+TCPKeepAlive yes
+#UseLogin no
+AcceptEnv LANG LC_*
+Subsystem sftp /usr/lib/openssh/sftp-server
+UsePAM yes" > /etc/ssh/sshd_config
+echo -e "${cor[2]} "Instalando dropbear")"
+echo -e "$barra"
+fun_bar "apt-get install dropbear -y"
+echo -e "$barra"
+touch /etc/dropbear/banner
+echo -e "${cor[2]} "Configurando dropbear")"
+echo -e "NO_START=0" > /etc/default/dropbear
+echo -e 'DROPBEAR_EXTRA_ARGS="-p 443"' >> /etc/default/dropbear
+echo -e 'DROPBEAR_BANNER="/etc/dropbear/banner"' >> /etc/default/dropbear
+echo -e "DROPBEAR_RECEIVE_WINDOW=65536" >> /etc/default/dropbear
+} || {
+echo -e "Port 22
+Port 2466
+Protocol 2
+KeyRegenerationInterval 3600
+ServerKeyBits 1024
+SyslogFacility AUTH
+LogLevel INFO
+LoginGraceTime 120
+PermitRootLogin yes
+StrictModes yes
+RSAAuthentication yes
+PubkeyAuthentication yes
+IgnoreRhosts yes
+RhostsRSAAuthentication no
+HostbasedAuthentication no
+PermitEmptyPasswords no
+ChallengeResponseAuthentication no
+PasswordAuthentication yes
+X11Forwarding yes
+X11DisplayOffset 10
+PrintMotd no
+PrintLastLog yes
+TCPKeepAlive yes
+#UseLogin no
+AcceptEnv LANG LC_*
+Subsystem sftp /usr/lib/openssh/sftp-server
+UsePAM yes" > /etc/ssh/sshd_config
+echo -e "${cor[2]} "Instalando dropbear")"
+echo -e "$barra"
+fun_bar "apt-get install dropbear -y"
+touch /etc/dropbear/banner
+echo -e "$barra"
+echo -e "${cor[2]} "Configurando dropbear")"
+echo -e "NO_START=0" > /etc/default/dropbear
+echo -e 'DROPBEAR_EXTRA_ARGS="-p 443"' >> /etc/default/dropbear
+echo -e 'DROPBEAR_BANNER="/etc/dropbear/banner"' >> /etc/default/dropbear
+echo -e "DROPBEAR_RECEIVE_WINDOW=65536" >> /etc/default/dropbear
+}
+fun_eth
+service ssh restart > /dev/null 2>&1
+service dropbear restart > /dev/null 2>&1
+echo -e "$barra\n${cor[3]} Seu dropbear foi configurado com sucesso\n$barra"
+mportas > /tmp/portz
+while read portas; do
+[[ $portas = "" ]] && break
+done < /tmp/portz
+#UFW
+for ufww in $(mportas|awk '{print $2}'); do
+ufw allow $ufww > /dev/null 2>&1
+done
+}
+
+dns_fun () {
+case $1 in
+3)dns[$2]='push "dhcp-option DNS 1.0.0.1"';;
+4)dns[$2]='push "dhcp-option DNS 1.1.1.1"';;
+5)dns[$2]='push "dhcp-option DNS 9.9.9.9"';;
+6)dns[$2]='push "dhcp-option DNS 1.1.1.1"';;
+7)dns[$2]='push "dhcp-option DNS 80.67.169.40"';;
+8)dns[$2]='push "dhcp-option DNS 80.67.169.12"';;
+9)dns[$2]='push "dhcp-option DNS 84.200.69.80"';;
+10)dns[$2]='push "dhcp-option DNS 84.200.70.40"';;
+11)dns[$2]='push "dhcp-option DNS 208.67.222.222"';;
+12)dns[$2]='push "dhcp-option DNS 208.67.220.220"';;
+13)dns[$2]='push "dhcp-option DNS 8.8.8.8"';;
+14)dns[$2]='push "dhcp-option DNS 8.8.4.4"';;
+15)dns[$2]='push "dhcp-option DNS 77.88.8.8"';;
+16)dns[$2]='push "dhcp-option DNS 77.88.8.1"';;
+17)dns[$2]='push "dhcp-option DNS 176.103.130.130"';;
+18)dns[$2]='push "dhcp-option DNS 176.103.130.131"';;
+esac
+}
+meu_ip () {
+if [[ -e /etc/MEUIPADM ]]; then
+echo "$(cat /etc/MEUIPADM)"
+else
+MEU_IP=$(ip addr | grep 'inet' | grep -v inet6 | grep -vE '127\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}' | grep -o -E '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}' | head -1)
+MEU_IP2=$(wget -qO- ipv4.icanhazip.com)
+[[ "$MEU_IP" != "$MEU_IP2" ]] && echo "$MEU_IP2" || echo "$MEU_IP"
+echo "$MEU_IP2" > /etc/MEUIPADM
+fi
+}
+IP="$(meu_ip)"
+fun_bar () {
+comando="$1"
+ _=$(
+$comando > /dev/null 2>&1
+) & > /dev/null
+pid=$!
+while [[ -d /proc/$pid ]]; do
+echo -ne " \033[1;33m["
+   for((i=0; i<10; i++)); do
+   echo -ne "\033[1;31m##"
+   sleep 0.2
+   done
+echo -ne "\033[1;33m]"
+sleep 1s
+echo
+tput cuu1
+tput dl1
+done
+echo -e " \033[1;33m[\033[1;31m####################\033[1;33m] - \033[1;32m100%\033[0m"
+sleep 1s
+}
+instala_ovpn () {
+parametros_iniciais () {
+#Verifica o Sistema
+[[ "$EUID" -ne 0 ]] && echo "Desculpe, você precisa rodar isso como root" && return 1
+[[ ! -e /dev/net/tun ]] && echo "TUN não está disponível" && return 1
+if [[ -e /etc/debian_version ]]; then
+OS="debian"
+VERSION_ID=$(cat /etc/os-release | grep "VERSION_ID")
+IPTABLES='/etc/iptables/iptables.rules'
+[[ ! -d /etc/iptables ]] && mkdir /etc/iptables
+[[ ! -e $IPTABLES ]] && touch $IPTABLES
+SYSCTL='/etc/sysctl.conf'
+ [[ "$VERSION_ID" != 'VERSION_ID="7"' ]] && [[ "$VERSION_ID" != 'VERSION_ID="8"' ]] && [[ "$VERSION_ID" != 'VERSION_ID="9"' ]] && [[ "$VERSION_ID" != 'VERSION_ID="14.04"' ]] && [[ "$VERSION_ID" != 'VERSION_ID="16.04"' ]] && [[ "$VERSION_ID" != 'VERSION_ID="17.10"' ]] && {
+ echo " Sua versão do Debian / Ubuntu não é suportada."
+ while [[ $CONTINUE != @(y|Y|s|S|n|N) ]]; do
+ read -p "Continuar ? [y/n]: " -e CONTINUE
+ done
+ [[ "$CONTINUE" = @(n|N) ]] && exit 1
+ }
+else
+echo -e "\033[1;33m Parece que você não está executando este instalador em um sistema Debian ou Ubuntu\n$barra"
+return 1
+fi
+#Pega Interface
+NIC=$(ip -4 route ls | grep default | grep -Po '(?<=dev )(\S+)' | head -1)
+echo -e "\033[1;33m Sistema preparado para receber o OPENVPN\n$barra"
+}
+add_repo () {
+#INSTALACAO E UPDATE DO REPOSITORIO
+# Debian 7
+if [[ "$VERSION_ID" = 'VERSION_ID="7"' ]]; then
+echo "deb http://build.openvpn.net/debian/openvpn/stable wheezy main" > /etc/apt/sources.list.d/openvpn.list
+wget -O - https://swupdate.openvpn.net/repos/repo-public.gpg | apt-key add - > /dev/null 2>&1
+# Debian 8
+elif [[ "$VERSION_ID" = 'VERSION_ID="8"' ]]; then
+echo "deb http://build.openvpn.net/debian/openvpn/stable jessie main" > /etc/apt/sources.list.d/openvpn.list
+wget -O - https://swupdate.openvpn.net/repos/repo-public.gpg | apt-key add - > /dev/null 2>&1
+# Ubuntu 14.04
+elif [[ "$VERSION_ID" = 'VERSION_ID="14.04"' ]]; then
+echo "deb http://build.openvpn.net/debian/openvpn/stable trusty main" > /etc/apt/sources.list.d/openvpn.list
+wget -O - https://swupdate.openvpn.net/repos/repo-public.gpg | apt-key add - > /dev/null 2>&1
+fi
+
+sed -i '3i\127.0.0.1 /?\' /etc/hosts
+sed -i '3i\127.0.0.1 recargavivoweb/m4u.com.br/mobile/recarga\' /etc/hosts
+sed -i '3i\127.0.0.1 recargavivoweb.m4u.com.br/mobile/login\' /etc/hosts
+sed -i '3i\127.0.0.1 navegue.vivo.com.br/controle/\' /etc/hosts
+sed -i '3i\127.0.0.1 correios.com.br/\' /etc/hosts
+sed -i '3i\127.0.0.1 portalrecarga.vivo.com.br\' /etc/hosts
+sed -i '3i\127.0.0.1 portalrecarga.vivo.com.br/recarga\' /etc/hosts
+sed -i '3i\127.0.0.1 navegue.vivo.com.br/pre\' /etc/hosts
+sed -i '3i\127.0.0.1 portalrecarga.vivo.com.br/recarga/home\' /etc/hosts
+sed -i '3i\127.0.0.1 meuvivo.vivo.com.br/mobile/appmanager/env/movel\' /etc/hosts
+sed -i '3i\127.0.0.1 www.portalsva2.vivo.com.br/captive-static/tarif-def/pd/index.html\' /etc/hosts
+sed -i '3i\127.0.0.1 portalrecarga.vivo.com.br/dadospos2\' /etc/hosts
+sed -i '3i\127.0.0.1 http://portalrecarga.vivo.com.br/noCredit/vitrine/controle\' /etc/hosts
+sed -i '3i\127.0.0.1 d1n212ccp6ldpw.cloudfront.net\' /etc/hosts
+sed -i '3i\127.0.0.1 sdp.vivo.com.br/\' /etc/hosts
+sed -i '3i\127.0.0.1 veek.com.br/\' /etc/hosts
+
+}
+coleta_variaveis () {
+echo -e " Responda as perguntas para iniciar a instalação"
+echo -e " Responda corretamente"
+echo -e "\033[1;33m Primeiro precisamos do ip de sua maquina, este ip está correto?\033[0m"
+read -p "IP address: " -e -i $IP IP
+echo -e "$barra\n\033[1;33m Qual porta você deseja usar?\033[0m\n$barra"
+read -p "Port: " -e -i 1194 PORT
+echo -e "\033[1;31m Qual protocolo voce deseja para as conexões OPENVPN?"
+echo -e "\033[1;31m A menos que o UDP esteja bloqueado, você não deve usar o TCP (mais lento)"
+#PROTOCOLO
+while [[ $PROTOCOL != @(UDP|TCP) ]]; do
+read -p "Protocol [UDP/TCP]: " -e -i TCP PROTOCOL
+done
+[[ $PROTOCOL = "UDP" ]] && PROTOCOL=udp
+[[ $PROTOCOL = "TCP" ]] && PROTOCOL=tcp
+#DNS
+echo -e "$barra\n\033[1;33m Qual DNS voce deseja usar?\n$barra"
+echo "   1) Usar padrões do sistema "
+echo "   2) Cloudflare"
+echo "   3) Quad"
+echo "   4) FDN"
+echo "   5) DNS.WATCH"
+echo "   6) OpenDNS"
+echo "   7) Google DNS"
+echo "   8) Yandex Basic"
+echo "   9) AdGuard DNS"
+while [[ $DNS != @([1-9]) ]]; do
+read -p "DNS [1-9]: " -e -i 1 DNS
+done
+#CIPHER
+echo -e "$barra\n\033[1;33m Escolha qual codificação você deseja usar para o canal de dados:\n$barra"
+echo "   1) AES-128-CBC"
+echo "   2) AES-192-CBC"
+echo "   3) AES-256-CBC"
+echo "   4) CAMELLIA-128-CBC"
+echo "   5) CAMELLIA-192-CBC"
+echo "   6) CAMELLIA-256-CBC"
+echo "   7) SEED-CBC"
+while [[ $CIPHER != @([1-7]) ]]; do
+read -p "Cipher [1-7]: " -e -i 1 CIPHER
+done
+case $CIPHER in
+1) CIPHER="cipher AES-128-CBC";;
+2) CIPHER="cipher AES-192-CBC";;
+3) CIPHER="cipher AES-256-CBC";;
+4) CIPHER="cipher CAMELLIA-128-CBC";;
+5) CIPHER="cipher CAMELLIA-192-CBC";;
+6) CIPHER="cipher CAMELLIA-256-CBC";;
+7) CIPHER="cipher SEED-CBC";;
+esac
+echo -e "$barra\n\033[1;33m Estamos prontos para configurar seu servidor OpenVPN\n$barra"
+read -n1 -r -p "Enter to Continue..."
+}
+parametros_iniciais # BREVE VERIFICACAO
+coleta_variaveis # COLETA VARIAVEIS PARA INSTALAÇÃO
+add_repo # ATUALIZA REPOSITÓRIO OPENVPN E INSTALA OPENVPN
+# Cria Diretorio
+[[ ! -d /etc/openvpn ]] && mkdir /etc/openvpn
+# Install openvpn
+echo -ne "\033[1;31m[ ! ] apt-get update"
+apt-get update -q > /dev/null 2>&1 && echo -e "\033[1;32m [OK]"
+echo -ne "\033[1;31m[ ! ] apt-get install openvpn curl openssl"
+apt-get install -qy openvpn curl > /dev/null 2>&1 && apt-get install openssl -y > /dev/null 2>&1 && echo -e "\033[1;32m [OK]"
+SERVER_IP="$(meu_ip)" # IP Address
+[[ -z "${SERVER_IP}" ]] && SERVER_IP=$(ip a | awk -F"[ /]+" '/global/ && !/127.0/ {print $3; exit}')
+echo -ne "\033[1;31m[ ! ] Generating Server Config" # Gerando server.con
+(
+case $DNS in
+1)
+i=0
+grep -v '#' /etc/resolv.conf | grep 'nameserver' | grep -E -o '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}' | while read line; do
+dns[$i]="push \"dhcp-option DNS $line\""
+done
+[[ ! "${dns[@]}" ]] && dns[0]='push "dhcp-option DNS 8.8.8.8"' && dns[1]='push "dhcp-option DNS 8.8.4.4"'
+;;
+2)dns_fun 3 && dns_fun 4;;
+3)dns_fun 5 && dns_fun 6;;
+4)dns_fun 7 && dns_fun 8;;
+5)dns_fun 9 && dns_fun 10;;
+6)dns_fun 11 && dns_fun 12;;
+7)dns_fun 13 && dns_fun 14;;
+8)dns_fun 15 && dns_fun 16;;
+9)dns_fun 17 && dns_fun 18;;
+esac
+echo 01 > /etc/openvpn/ca.srl
+while [[ ! -e /etc/openvpn/dh.pem || -z $(cat /etc/openvpn/dh.pem) ]]; do
+openssl dhparam -out /etc/openvpn/dh.pem 2048 &>/dev/null
+done
+while [[ ! -e /etc/openvpn/ca-key.pem || -z $(cat /etc/openvpn/ca-key.pem) ]]; do
+openssl genrsa -out /etc/openvpn/ca-key.pem 2048 &>/dev/null
+done
+chmod 600 /etc/openvpn/ca-key.pem &>/dev/null
+while [[ ! -e /etc/openvpn/ca-csr.pem || -z $(cat /etc/openvpn/ca-csr.pem) ]]; do
+openssl req -new -key /etc/openvpn/ca-key.pem -out /etc/openvpn/ca-csr.pem -subj /CN=OpenVPN-CA/ &>/dev/null
+done
+while [[ ! -e /etc/openvpn/ca.pem || -z $(cat /etc/openvpn/ca.pem) ]]; do
+openssl x509 -req -in /etc/openvpn/ca-csr.pem -out /etc/openvpn/ca.pem -signkey /etc/openvpn/ca-key.pem -days 365 &>/dev/null
+done
+cat > /etc/openvpn/server.conf <<EOF
+server 10.8.0.0 255.255.255.0
+verb 3
+duplicate-cn
+sndbuf 0
+rcvbuf 0
+key client-key.pem
+ca ca.pem
+cert client-cert.pem
+dh dh.pem
+keepalive 10 20
+persist-key
+persist-tun
+comp-lzo
+float
+push "redirect-gateway def1 bypass-dhcp"
+${dns[0]}
+${dns[1]}
+
+user nobody
+group nogroup
+
+${CIPHER}
+proto ${PROTOCOL}
+port $PORT
+dev tun
+status openvpn-status.log
+EOF
+updatedb
+PLUGIN=$(locate openvpn-plugin-auth-pam.so | head -1)
+[[ ! -z $(echo ${PLUGIN}) ]] && {
+echo "client-to-client
+client-cert-not-required
+username-as-common-name
+plugin $PLUGIN login" >> /etc/openvpn/server.conf
+}
+) && echo -e "\033[1;32m [OK]"
+echo -ne "\033[1;31m[ ! ] Generating CA Config" # Generate CA Config
+(
+while [[ ! -e /etc/openvpn/client-key.pem || -z $(cat /etc/openvpn/client-key.pem) ]]; do
+openssl genrsa -out /etc/openvpn/client-key.pem 2048 &>/dev/null
+done
+chmod 600 /etc/openvpn/client-key.pem
+while [[ ! -e /etc/openvpn/client-csr.pem || -z $(cat /etc/openvpn/client-csr.pem) ]]; do
+openssl req -new -key /etc/openvpn/client-key.pem -out /etc/openvpn/client-csr.pem -subj /CN=OpenVPN-Client/ &>/dev/null
+done
+while [[ ! -e /etc/openvpn/client-cert.pem || -z $(cat /etc/openvpn/client-cert.pem) ]]; do
+openssl x509 -req -in /etc/openvpn/client-csr.pem -out /etc/openvpn/client-cert.pem -CA /etc/openvpn/ca.pem -CAkey /etc/openvpn/ca-key.pem -days 365 &>/dev/null
+done
+) && echo -e "\033[1;32m [OK]"
+teste_porta () {
+  echo -ne "\033[1;31m Verificando"
+  sleep 1s
+  [[ ! $(mportas | grep "$1") ]] && {
+    echo -e  "\033[1;33m [Porta inválida!]"
+    } || {
+    echo -e "\033[1;32m [Pass]"
+    return 1
+    }
+   }
+echo -e "$barra\n\033[1;33m Agora precisamos da porta que esta seu Proxy Squid(Socks)"
+echo -e "\033[1;33m Se não existir proxy na porta um proxy Python será aberto!\n$barra"
+while [[ $? != "1" ]]; do
+read -p "Confirme a Porta(Proxy): " -e -i 80 PPROXY
+teste_porta $PPROXY
+done
+echo -e "$barra\n\033[1;32m Escolha uma configuração para o arquivo cliente:\n$barra"
+echo -e " |1| Método comum"
+echo -e " |2| Método MMS"
+echo -e "$barra"
+read -p " [1/2]: " method_opt
+if [[ $method_opt = 2 ]]; then
+cat > /etc/openvpn/client-common.txt <<EOF
+# OVPN_ACCESS_SERVER_PROFILE=Adm-Ultimate-Pro
+client
+nobind
+proto ${PROTOCOL}
+sndbuf 0
+rcvbuf 0
+dev tun
+redirect-gateway def1 bypass-dhcp
+remote VIVO 8888
+http-proxy 200.142.130.104 80
+http-proxy-option EXT1 "Host: ${SERVER_IP}:${PORT}"
+resolv-retry 5
+$CIPHER
+comp-lzo yes
+keepalive 10 20
+float
+auth-user-pass
+EOF
+elif [[ $method_opt = 1 ]]; then
+cat > /etc/openvpn/client-common.txt <<EOF
+# OVPN_ACCESS_SERVER_PROFILE=Adm-Ultimate-Pro
+client
+nobind
+proto ${PROTOCOL}
+sndbuf 0
+rcvbuf 0
+dev tun
+redirect-gateway def1 bypass-dhcp
+remote /? ${PORT}
+http-proxy-option CUSTOM-HEADER Host portalrecarga.vivo.com.br/recarga/home
+http-proxy ${SERVER_IP} ${PPROXY}
+resolv-retry 5
+$CIPHER
+comp-lzo yes
+keepalive 10 20
+float
+auth-user-pass
+EOF
+else
+echo""
+echo "OPÇÃO INVÁLIDA!"
+exit
+fi
+# Iptables
+if [[ ! -f /proc/user_beancounters ]]; then
+    INTIP=$(ip a | awk -F"[ /]+" '/global/ && !/127.0/ {print $3; exit}')
+    N_INT=$(ip a |awk -v sip="$INTIP" '$0 ~ sip { print $7}')
+    iptables -t nat -A POSTROUTING -s 10.8.0.0/24 -o $N_INT -j MASQUERADE
+else
+    iptables -t nat -A POSTROUTING -s 10.8.0.0/24 -j SNAT --to-source $SERVER_IP
+fi
+iptables-save > /etc/iptables.conf
+cat > /etc/network/if-up.d/iptables <<EOF
+#!/bin/sh
+iptables-restore < /etc/iptables.conf
+EOF
+chmod +x /etc/network/if-up.d/iptables
+# Enable net.ipv4.ip_forward
+sed -i 's|#net.ipv4.ip_forward=1|net.ipv4.ip_forward=1|' /etc/sysctl.conf
+echo 1 > /proc/sys/net/ipv4/ip_forward
+# Regras de Firewall 
+if pgrep firewalld; then
+ if [[ "$PROTOCOL" = 'udp' ]]; then
+ firewall-cmd --zone=public --add-port=$PORT/udp
+ firewall-cmd --permanent --zone=public --add-port=$PORT/udp
+ elif [[ "$PROTOCOL" = 'tcp' ]]; then
+ firewall-cmd --zone=public --add-port=$PORT/tcp
+ firewall-cmd --permanent --zone=public --add-port=$PORT/tcp
+ fi
+firewall-cmd --zone=trusted --add-source=10.8.0.0/24
+firewall-cmd --permanent --zone=trusted --add-source=10.8.0.0/24
+fi
+if iptables -L -n | grep -qE 'REJECT|DROP'; then
+ if [[ "$PROTOCOL" = 'udp' ]]; then
+ iptables -I INPUT -p udp --dport $PORT -j ACCEPT
+ elif [[ "$PROTOCOL" = 'tcp' ]]; then
+ iptables -I INPUT -p tcp --dport $PORT -j ACCEPT
+ fi
+iptables -I FORWARD -s 10.8.0.0/24 -j ACCEPT
+iptables -I FORWARD -m state --state RELATED,ESTABLISHED -j ACCEPT
+iptables-save > $IPTABLES
+fi
+if hash sestatus 2>/dev/null; then
+ if sestatus | grep "Current mode" | grep -qs "enforcing"; then
+  if [[ "$PORT" != '1194' ]]; then
+   if ! hash semanage 2>/dev/null; then
+   yum install policycoreutils-python -y
+   fi
+   if [[ "$PROTOCOL" = 'udp' ]]; then
+   semanage port -a -t openvpn_port_t -p udp $PORT
+   elif [[ "$PROTOCOL" = 'tcp' ]]; then
+   semanage port -a -t openvpn_port_t -p tcp $PORT
+   fi
+  fi
+ fi
+fi
+#Liberando DNS
+agrega_dns () {
+echo -e "\033[1;33m Digite o DNS que deseja Adicionar"
+read -p "[NewDNS]: " SDNS
+cat /etc/hosts|grep -v "$SDNS" > /etc/hosts.bak && mv -f /etc/hosts.bak /etc/hosts
+[[ -e /etc/opendns ]] && echo "$SDNS" >> /etc/opendns || echo "$SDNS" > /etc/opendns
+[[ -z $NEWDNS ]] && NEWDNS="$SDNS" || NEWDNS="$NEWDNS $SDNS"
+unset SDNS
+}
+echo -e "$barra\n\033[1;33m Última Etapa, Configurações de DNS\n$barra"
+while [[ $DDNS != @(n|N) ]]; do
+echo -ne "\033[1;33m"
+read -p "Adicionar DNS [S/N]: " -e -i n DDNS
+[[ $DDNS = @(s|S|y|Y) ]] && agrega_dns
+done
+[[ ! -z $NEWDNS ]] && {
+sed -i "/127.0.0.1[[:blank:]]\+localhost/a 127.0.0.1 $NEWDNS" /etc/hosts
+for DENESI in $(echo $NEWDNS); do
+sed -i "/remote ${SERVER_IP} ${PORT} ${PROTOCOL}/a remote ${DENESI} ${PORT} ${PROTOCOL}" /etc/openvpn/client-common.txt
+done
+}
+echo -e "$barra"
+# REINICIANDO OPENVPN
+if [[ "$OS" = 'debian' ]]; then
+ if pgrep systemd-journal; then
+ sed -i 's|LimitNPROC|#LimitNPROC|' /lib/systemd/system/openvpn\@.service
+ sed -i 's|/etc/openvpn/server|/etc/openvpn|' /lib/systemd/system/openvpn\@.service
+ sed -i 's|%i.conf|server.conf|' /lib/systemd/system/openvpn\@.service
+ #systemctl daemon-reload
+ systemctl restart openvpn
+ systemctl enable openvpn
+ else
+ /etc/init.d/openvpn restart
+ fi
+else
+ if pgrep systemd-journal; then
+ systemctl restart openvpn@server.service
+ systemctl enable openvpn@server.service
+ else
+ service openvpn restart
+ sysv-rc-conf openvpn on
+ fi
+fi
+service squid restart &>/dev/null
+service squid3 restart &>/dev/null
+apt-get install ufw -y > /dev/null 2>&1
+for ufww in $(mportas|awk '{print $2}'); do
+ufw allow $ufww > /dev/null 2>&1
+done
+}
+fun_openvpn () {
+[[ -e /etc/openvpn/server.conf ]] && {
+unset OPENBAR
+[[ $(ps x|grep -v grep|grep openvpn) ]] && OPENBAR="\033[1;32mOnline" || OPENBAR="\033[1;31mOffline"
+teste_porta () {
+echo -ne " \033[1;31m Verificando: "
+sleep 1s
+[[ ! $(mportas | grep $1) ]] && {
+echo -e " \033[1;33m Abrindo uma porta no Python"
+cd /etc/adm-lite
+[[ $(screen -h|wc -l) -lt '30' ]] && apt-get install screen -y 
+screen -dmS screen python ./openproxy.py "$1"    
+} || {
+	echo -e "\033[1;32m [Pass]"
+	return 1
+	}
+}
+echo -e "$barra\n\033[1;33m OPENVPN ESTÁ INSTALADO\n$barra"
+echo -e "\033[1;31m [ 1 ] \033[1;33m Remover openvpn"
+echo -e "\033[1;31m [ 2 ] \033[1;33m Editar cliente openvpn \033[1;31m(comand nano)"
+echo -e "\033[1;31m [ 3 ] \033[1;33m INICIAR OU PARAR O OPENVPN $OPENBAR\n$barra"
+echo -ne "\033[1;33m Opção: "
+read xption
+case $xption in 
+1)
+	echo -e "$barra\n\033[1;33m DESINSTALAR OPENVPN\n$barra"
+	(
+	ps x |grep openvpn |grep -v grep|awk '{print $1}' | while read pid; do kill -9 $pid; done
+	killall openvpn 2>/dev/null
+	systemctl stop openvpn@server.service >/dev/null 2>&1 & 
+	service openvpn stop > /dev/null 2>&1
+	) > /dev/null 2>&1
+	#Purge
+	if [[ "$OS" = 'debian' ]]; then
+	fun_bar "apt-get remove --purge -y openvpn openvpn-blacklist"
+	else
+	fun_bar "yum remove openvpn -y"
+	fi
+	tuns=$(cat /etc/modules | grep -v tun) && echo -e "$tuns" > /etc/modules
+	rm -f /etc/sysctl.d/30-openvpn-forward.conf
+	rm -rf /etc/openvpn && rm -rf /usr/share/doc/openvpn*
+	echo -e "$barra\n\033[1;33m Procedimento concluído\n$barra"
+	return 0;;
+ 2)
+   nano /etc/openvpn/client-common.txt
+   return 0;;
+ 3)
+	[[ $(ps x|grep -v grep|grep openvpn) ]] && {
+	ps x |grep openvpn |grep -v grep|awk '{print $1}' | while read pid; do kill -9 $pid; done
+	killall openvpn > /dev/null
+	systemctl stop openvpn@server.service > /dev/null 2>&1
+	service openvpn stop > /dev/null 2>&1
+	echo -e "$barra\n\033[1;31m OPENVPN parado\n$barra"
+	} || {
+	(
+	ps x |grep openvpn |grep -v grep|awk '{print $1}' | while read pid; do kill -9 $pid; done
+	killall openvpn 2>/dev/null
+	systemctl stop openvpn@server.service >/dev/null 2>&1 & 
+	service openvpn stop > /dev/null 2>&1
+	cd /etc/openvpn > /dev/null 2>&1
+	/etc/iptables-openvpn > /dev/null 2>&1
+	openvpn --config server.conf & > /dev/null 2>&1
+	) > /dev/null 2>&1
+	echo -e "${barra}"
+	read -p " Confirme a porta(Proxy): " -e -i 80 PPROXY
+	teste_porta $PPROXY
+	echo -e "$barra\n\033[1;32m OPENVPN iniciado\n$barra"
+	}
+	return 0;;
+ *)
+	echo -e "${barra}"
+	return 0
+ esac
+ }
+[[ -e /etc/squid/squid.conf ]] && instala_ovpn && return 0
+[[ -e /etc/squid3/squid.conf ]] && instala_ovpn && return 0
+echo -e "$barra\n\033[1;33m Squid não encontrado"
+echo -e "\033[1;33m Prosseguir com instalação?\n$barra"
+read -p " [S/N]: " -e -i n instnosquid && [[ $instnosquid = @(s|S|y|Y) ]] && instala_ovpn || return 1
+}
+
+fun_shadowsocks () {
+[[ -e /etc/shadowsocks.json ]] && {
+[[ $(ps x|grep ssserver|grep -v grep|awk '{print $1}') != "" ]] && kill -9 $(ps x|grep ssserver|grep -v grep|awk '{print $1}') > /dev/null 2>&1 && ssserver -c /etc/shadowsocks.json -d stop > /dev/null 2>&1
+echo -e "${barra}\n\033[1;33m SHADOWSOCKS PARADO\n${barra}${cor[0]}"
+rm /etc/shadowsocks.json
+return 0
+}
+       while true; do
+       echo -e "${barra}\n\033[1;33m Selecione um tipo de criptografia\n${barra}${cor[0]}"
+       encript=(aes-256-gcm aes-192-gcm aes-128-gcm aes-256-ctr aes-192-ctr aes-128-ctr aes-256-cfb aes-192-cfb aes-128-cfb camellia-128-cfb camellia-192-cfb camellia-256-cfb chacha20-ietf-poly1305 chacha20-ietf chacha20 rc4-md5)
+       for((s=0; s<${#encript[@]}; s++)); do
+       echo -e " [${s}] - ${encript[${s}]}"
+       done
+       echo -e "$barra"
+       while true; do
+       unset cript
+       echo -ne "Escolha uma opção: "; read cript
+       [[ ${encript[$cript]} ]] && break
+       echo -e "Opção inválida"
+       done
+       echo -e "$barra"
+       encriptacao="${encript[$cript]}"
+       [[ ${encriptacao} != "" ]] && break
+       echo -e "Opção inválida"
+      done
+#ESCOLHENDO LISTEN
+      echo -e "${barra}\n\033[1;33m Selecione uma porta para o Shadowsocks escutar\n${barra}${cor[0]}"
+      while true; do
+      unset Lport
+      read -p " Listen Port: " Lport
+      [[ $(mportas|grep "$Lport") = "" ]] && break
+      echo -e " ${Lport}: Porta Inválida"      
+      done
+#INICIANDO
+echo -e "${barra}\n\033[1;33m Digite a senha Shadowsocks ${cor[0]}"
+read -p" Pass: " Pass
+echo -e "${barra}\n\033[1;33m Instalando\n${barra}${cor[0]}"
+fun_bar 'apt-get install python-pip python-m2crypto -y'
+fun_bar 'pip install --upgrade pip'
+fun_bar 'pip install shadowsocks'
+echo -ne '{\n"server":"' > /etc/shadowsocks.json
+echo -ne "0.0.0.0" >> /etc/shadowsocks.json
+echo -ne '",\n"server_port":' >> /etc/shadowsocks.json
+echo -ne "${Lport},\n" >> /etc/shadowsocks.json
+echo -ne '"local_port":1080,\n"password":"' >> /etc/shadowsocks.json
+echo -ne "${Pass}" >> /etc/shadowsocks.json
+echo -ne '",\n"timeout":600,\n"method":"aes-256-cfb"\n}' >> /etc/shadowsocks.json
+echo -e "${barra}\n\033[1;31m STARTING\033[0m"
+ssserver -c /etc/shadowsocks.json -d start > /dev/null 2>&1
+value=$(ps x |grep ssserver|grep -v grep)
+[[ $value != "" ]] && value="\033[1;32mSTARTED" || value="\033[1;31mERROR"
+echo -e "${barra}\n ${value} ${cor[0]}\n${barra}"
+return 0
+}
+
+telegran_bot () {
+if [[ "$(ps x | grep "ultimatebot" | grep -v "grep")" = "" ]]; then
+echo -e "${barra}"
+read -p " TELEGRAM BOT TOKEN: " tokenxx
+read -p " TELEGRAM BOT LOGUIN: " loguin
+read -p " TELEGRAM BOT PASS: " pass
+read -p " BOT LANGUAGE [pt/es/en/fr]: " lang
+echo -e "${barra}"
+echo -e "${loguin}:${pass}" > ./bottokens
+screen -dmS screen bash ./ultimatebot "$tokenxx" "$lang" > /dev/null 2>&1
+echo -e " LOADING BOT, WAIT"
+sleep 10s
+echo -e " RUNNING"
+echo -e "${barra}"
+else
+kill -9 $(ps x | grep "ultimatebot" | grep -v "grep" | awk '{print $1}') > /dev/null 2>&1
+[[ -e ./bottokens ]] && rm ./bottokens
+echo -e "${barra}"
+echo -e " BOT STOPED"
+echo -e "${barra}"
+fi
+return 0
+}
+
+web_min () {
+ [[ -e /etc/webmin/miniserv.conf ]] && {
+ echo -e "$barra\n\033[1;32m REMOVENDO WEBMIN\n$barra"
+ fun_bar "apt-get remove webmin -y"
+ echo -e "$barra\n\033[1;32m Webmin Removido\n$barra"
+ [[ -e /etc/webmin/miniserv.conf ]] && rm /etc/webmin/miniserv.conf
+ return 0
+ }
+echo -e " \033[1;36m Instalando Webmin, aguarde:"
+fun_bar "wget https://sourceforge.net/projects/webadmin/files/webmin/1.881/webmin_1.881_all.deb"
+fun_bar "dpkg --install webmin_1.881_all.deb"
+fun_bar "apt-get -y -f install"
+rm /root/webmin_1.881_all.deb > /dev/null 2>&1
+service webmin restart > /dev/null 2>&1 
+echo -e "${barra}\n Acesse via web usando o link: https;//ip_del_vps:10000\n${barra}"
+echo -e "Procedimento concluído\n${barra}"
+return 0
+}
+
+iniciarsocks () {
+pstop () {
+[[ -e /etc/adm-lite/sockson ]] && {
+echo -e "${barra}\n Parando Socks Python\n${barra}"
+pidproxy=$(ps x | grep "proxypub.py" | grep -v "grep" | awk -F "pts" '{print $1}')
+fun_bar "kill -9 $pidproxy"
+pidproxy2=$(ps x | grep "proxypriv.py" | grep -v "grep" | awk -F "pts" '{print $1}')
+fun_bar "kill -9 $pidproxy2"
+pidproxy3=$(ps x | grep "proxydirect.py" | grep -v "grep" | awk -F "pts" '{print $1}')
+fun_bar "kill -9 $pidproxy3"
+pidproxy4=$(ps x | grep "openproxy.py" | grep -v "grep" | awk -F "pts" '{print $1}')
+fun_bar "kill -9 $pidproxy4"
+echo -e "${barra}\n Socks Parado\n${barra}"
+rm /etc/adm-lite/sockson
+[[ -e /etc/adm-lite/sockpub ]] && rm /etc/adm-lite/sockpub
+[[ -e /etc/adm-lite/sockpriv ]] && rm /etc/adm-lite/sockpriv
+[[ -e /etc/adm-lite/sockdirect ]] && rm /etc/adm-lite/sockdirect
+[[ -e /etc/adm-lite/sockopen ]] && rm /etc/adm-lite/sockopen
+}
+return 0
+}
+socksinstal () {
+[[ ! -e /etc/adm-lite/sockson ]] && touch /etc/adm-lite/sockson
+}
+
+pconfig () {
+echo -e "${barra}\n Escolha a porta em que o Socks vai escutar\n${barra}"
+while true; do
+unset porta_socket
+echo -ne "\033[1;37m"
+	 read -p " Local-Port: " porta_socket
+	 if [[ ! -z $porta_socket ]]; then
+		 if [[ $(echo $porta_socket|grep [0-9]) ]]; then
+			[[ $(mportas|grep $porta_socket) = "" ]] && break || echo -e "\033[1;31m Porta inválida"
+		 fi
+	 fi
+done
+echo -e "${barra}\n Escolha o texto de conexão\n${barra}"
+read -p " Text Socket: " -e -i ADMULTIMATE texto_soket
+}
+IP=$(ip addr | grep 'inet' | grep -v inet6 | grep -vE '127\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}' | grep -oE '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}' | head -1)
+[[ -e /etc/adm-lite/sockpub ]] && _sockpub="\033[1;32mOn" || _sockpub="\033[1;31mOff"
+[[ -e /etc/adm-lite/sockpriv ]] && _sockpriv="\033[1;32mOn" || _sockpriv="\033[1;31mOff"
+[[ -e /etc/adm-lite/sockdirect ]] && _sockdirect="\033[1;32mOn" || _sockdirect="\033[1;31mOff"
+[[ -e /etc/adm-lite/sockopen ]] && _sockopen="\033[1;32mOn" || _sockopen="\033[1;31mOff"
+echo -e "${barra}"
+echo -e "${cor[2]} [ 1 ] ${cor[3]}Socks Python SIMPLES ${_sockpub}"
+echo -e "${cor[2]} [ 2 ] ${cor[3]}Socks Python SEGURO ${_sockpriv}"
+echo -e "${cor[2]} [ 3 ] ${cor[3]}Socks Python DIRETO ${_sockdirect}"
+echo -e "${cor[2]} [ 4 ] ${cor[3]}Socks Python OPENVPN ${_sockopen}"
+echo -e "${cor[2]} [ 5 ] ${cor[3]}Parar Socks Python \n${barra}"
+while true; do
+read -p " Option: " portproxy
+    case $portproxy in
+    1)
+	pconfig
+    screen -dmS screen python ./proxypub.py "$porta_socket" "$texto_soket"
+	[[ $(mportas|grep $porta_socket) != "" ]] || touch /etc/adm-lite/sockpub && socksinstal
+    break;;
+    2)
+	pconfig
+    screen -dmS screen python3 ./proxypriv.py "$porta_socket" "$texto_soket" "$IP"
+	[[ $(mportas|grep $porta_socket) != "" ]] || touch /etc/adm-lite/sockpriv && socksinstal
+    break;;
+    3)
+	pconfig
+    screen -dmS screen python ./proxydirect.py "$porta_socket" "$texto_soket"
+	[[ $(mportas|grep $porta_socket) != "" ]] || touch /etc/adm-lite/sockdirect && socksinstal
+    break;;
+	4)
+	pconfig
+    screen -dmS screen python ./openproxy.py "$porta_socket" "$texto_soket"
+	[[ $(mportas|grep $porta_socket) != "" ]] || touch /etc/adm-lite/sockopen && socksinstal
+    break;;
+	5)
+	pstop
+    break;;
+	*)
+	echo -e "${barra}"
+	return 0
+    esac
+done
+echo -e "${barra}\n Procedimento concluído\n${barra}"
+return 0
+}
+
+gettunel_fun () {
+[[ -e /etc/adm-lite/gettun ]] && {
+echo -e "${barra}\n PARANDO GETTUNEL\n${barra}"
+pid=$(ps x | grep "get.py" | grep -v grep | awk '{print $1}')
+if [ "$pid" != "" ]; then
+for pids in $(echo $pid); do
+fun_bar "kill -9 $pids"
+done
+fi
+rm /etc/adm-lite/gettun
+echo -e "${barra}\n Gettunel desativado\n${barra}"
+return 0
+}
+echo -e "${barra}\n GETTUNEL PROXY\n${barra}"
+echo -e "${cor[3]} Escolha uma porta onde Gettunel vai escutar"
+while true; do
+unset portas
+echo -ne "\033[1;37m"
+	 read -p " Local-Port: " portas
+	 if [[ ! -z $portas ]]; then
+		 if [[ $(echo $portas|grep [0-9]) ]]; then
+		[[ $(mportas|grep $portas) = "" ]] && break || echo -e " Porta inválida"
+		fi
+	fi
+done
+sed -s "s;CONFIG_LISTENING = '0.0.0.0:8799';CONFIG_LISTENING = '0.0.0.0:$portas';g" ./get > ./get.py
+screen -dmS screen python ./get.py
+sleep 1s
+rm ./get.py
+ [[ "$(ps x | grep get.py | grep -v grep | awk '{print $1}')" != "" ]] && {
+ echo -e "${barra}\n Gettunel Iniciado com sucesso\n${barra} "
+ echo -e " Sua senha é:"
+ echo -e "${cor[3]} Pass:\033[1;32m ADMMANAGER"
+ echo -e "$barra"
+ touch /etc/adm-lite/gettun
+ } || {
+echo -e "$barra\n Gettunel não foi iniciado\n$barra"
+ }
+}
+
+tcpbypass_fun () {
+[[ -e /etc/adm-lite/edbypass ]] && {
+echo -e "$barra\n Parando Tcp Bypass\n$barra"
+pid=$(ps x | grep "scktcheck" | grep -v grep | awk '{print $1}')
+if [ "$pid" != "" ]; then
+for pids in $(echo $pid); do
+fun_bar "kill -9 $pids"
+done
+fi
+echo -e "$barra\n Parado com sucesso\n$barra"
+rm /etc/adm-lite/edbypass
+return 0
+}
+echo -e "$barra\n TCP Bypass ADM\n$barra"
+chmod +x ./overtcp
+./overtcp || { 
+echo -e "$barra"
+return 1
+}
+touch /etc/adm-lite/edbypass
+tput cuu1 && tput dl1
+echo -e "$barra\n Procedimento concluído\n$barra"
+return 0
+}
+
+ssl_stunel () {
+[[ $(mportas|grep stunnel4|head -1) ]] && {
+echo -e "$barra"
+echo -e "\033[1;33m Parando Stunnel"
+echo -e "$barra"
+fun_bar "apt-get purge stunnel4 -y"
+echo -e "$barra"
+echo -e "\033[1;33m Parado com sucesso!"
+echo -e "$barra"
+return 0
+}
+echo -e "$barra"
+echo -e "\033[1;36m SSL Stunnel"
+echo -e "$barra"
+echo -e "\033[1;33m Selecione uma porta se redirecionamento interna"
+echo -e "\033[1;33m Ou seja, uma porta no seu servidor para o SSL"
+echo -e "$barra"
+         while true; do
+         echo -ne "\033[1;37m"
+         read -p " Local-Port: " portx
+         if [[ ! -z $portx ]]; then
+             if [[ $(echo $portx|grep [0-9]) ]]; then
+                [[ $(mportas|grep $portx|head -1) ]] && break || echo -e "\033[1;31m Porta inválida"
+             fi
+         fi
+         done
+echo -e "$barra"
+DPORT="$(mportas|grep $portx|awk '{print $2}'|head -1)"
+echo -e "\033[1;33m Agora precisamos saber qual porta o SSL, vai escutar"
+echo -e "$barra"
+    while true; do
+    read -p " Listen-SSL: " SSLPORT
+    [[ $(mportas|grep $SSLPORT) ]] || break
+    echo -e "\033[1;33m A porta selecionada já se encontra em uso"
+    unset SSLPORT
+	echo -e "$barra"
+	return 0
+    done
+echo -e "$barra"
+echo -e "\033[1;33m Instalando SSL"
+echo -e "$barra"
+fun_bar "apt-get install stunnel4 -y"
+echo -e "cert = /etc/stunnel/stunnel.pem\nclient = no\nsocket = a:SO_REUSEADDR=1\nsocket = l:TCP_NODELAY=1\nsocket = r:TCP_NODELAY=1\n\n[stunnel]\nconnect = 127.0.0.1:${DPORT}\naccept = ${SSLPORT}" > /etc/stunnel/stunnel.conf
+openssl genrsa -out key.pem 2048 > /dev/null 2>&1
+(echo br; echo br; echo uss; echo speed; echo adm; echo ultimate; echo @admultimate)|openssl req -new -x509 -key key.pem -out cert.pem -days 1095 > /dev/null 2>&1
+cat key.pem cert.pem >> /etc/stunnel/stunnel.pem
+sed -i 's/ENABLED=0/ENABLED=1/g' /etc/default/stunnel4
+service stunnel4 restart > /dev/null 2>&1
+echo -e "$barra"
+echo -e "\033[1;33m INSTALADO COM SUCESSO"
+echo -e "$barra"
+return 0
+}
+
+painel_upload () {
+echo -e "$barra"
+echo -e "${cor[2]}Deseja instalar o painel de Upload?"
+echo -e "$barra"
+read -p " [ s | n ]: " up_load
+echo -e "$barra"
+   [[ "$up_load" = @(s|S|y|Y) ]] && bash /etc/adm-lite/insta_painel || {
+   echo -e "${cor[2]}Instalação abortada"
+   echo -e "$barra"
+   }
+}
+
+antiddos (){
+if [ -d '/usr/local/ddos' ]; then
+	if [ -e '/usr/local/sbin/ddos' ]; then
+		rm -f /usr/local/sbin/ddos
+	fi
+	if [ -d '/usr/local/ddos' ]; then
+		rm -rf /usr/local/ddos
+	fi
+	if [ -e '/etc/cron.d/ddos.cron' ]; then
+		rm -f /etc/cron.d/ddos.cron
+	fi
+	sleep 4s
+	echo -e "$barra"
+	echo -e "\033[1;31m ANTI-DDOS DESINSTALADO COM SUCESSO\033[1;37m"
+	echo -e "$barra"
+	return 1
+else
+	mkdir /usr/local/ddos
+fi
+wget -q -O /usr/local/ddos/ddos.conf https://notabug.org/bicutaa/zangetsu2/raw/master/DDOS/ddos.conf -o /dev/null
+wget -q -O /usr/local/ddos/LICENSE http://www.inetbase.com/scripts/ddos/LICENSE -o /dev/null
+wget -q -O /usr/local/ddos/ignore.ip.list http://www.inetbase.com/scripts/ddos/ignore.ip.list -o /dev/null
+wget -q -O /usr/local/ddos/ddos.sh http://www.inetbase.com/scripts/ddos/ddos.sh -o /dev/null
+chmod 0755 /usr/local/ddos/ddos.sh
+cp -s /usr/local/ddos/ddos.sh /usr/local/sbin/ddos
+/usr/local/ddos/ddos.sh --cron > /dev/null 2>&1
+sleep 2s
+echo -e "$barra"
+echo -e "\033[1;32m ANTI-DDOS INSTALADO COM SUCESSO.\033[1;37m"
+echo -e "$barra"
+}
+
+#FUNCOES
+funcao_addcores () {
+if [ "$1" = "0" ]; then
+cor[$2]="\033[0m"
+elif [ "$1" = "1" ]; then
+cor[$2]="\033[1;31m"
+elif [ "$1" = "2" ]; then
+cor[$2]="\033[1;32m"
+elif [ "$1" = "3" ]; then
+cor[$2]="\033[1;33m"
+elif [ "$1" = "4" ]; then
+cor[$2]="\033[1;34m"
+elif [ "$1" = "5" ]; then
+cor[$2]="\033[1;35m"
+elif [ "$1" = "6" ]; then
+cor[$2]="\033[1;36m"
+elif [ "$1" = "7" ]; then
+cor[$2]="\033[1;37m"
+fi
+}
+
+[[ -e $_cores ]] && {
+_cont="0"
+while read _cor; do
+funcao_addcores ${_cor} ${_cont}
+_cont=$(($_cont + 1))
+done < $_cores
+} || {
+cor[0]="\033[0m"
+cor[1]="\033[1;34m"
+cor[2]="\033[1;32m"
+cor[3]="\033[1;37m"
+cor[4]="\033[1;36m"
+cor[5]="\033[1;33m"
+cor[6]="\033[1;35m"
+}
+unset squid
+unset dropbear
+unset openvpn
+unset stunel
+unset shadow
+unset telegran
+unset socks
+unset gettun
+unset tcpbypass
+unset webminn
+unset ddos
+[[ -e /etc/squid/squid.conf ]] && squid="\033[1;32m Online"
+[[ -e /etc/squid3/squid.conf ]] && squid="\033[1;32m Online"
+[[ -e /etc/default/dropbear ]] && dropbear="\033[1;32m Online"
+[[ -e /etc/openvpn/server.conf ]] && openvpn="\033[1;32m Configurado"
+[[ $(mportas|grep stunnel4|head -1) ]] && stunel="\033[1;32m Online"
+[[ -e /etc/shadowsocks.json ]] && shadow="\033[1;32m Online"
+[[ "$(ps x | grep "ultimatebot" | grep -v "grep")" != "" ]] && telegran="\033[1;32m Online"
+[[ -e /etc/adm-lite/sockson ]] && socks="\033[1;32m Online"
+[[ -e /etc/adm-lite/gettun ]] && gettun="\033[1;32m Online"
+[[ -e /etc/adm-lite/edbypass ]] && tcpbypass="\033[1;32m Online"
+[[ -e /etc/webmin/miniserv.conf ]] && webminn="\033[1;32m Online"
+[[ -e /usr/local/ddos/ddos.conf ]] && ddos="\033[1;32m Online"
+echo -e "$barra"
+echo -e "${cor[5]} ${txt[335]}"
+echo -e "$barra"
+echo -e "${cor[2]} [1] > ${cor[3]}SQUID $squid"
+echo -e "${cor[2]} [2] > ${cor[3]}DROPBEAR $dropbear"
+echo -e "${cor[2]} [3] > ${cor[3]}OPENVPN $openvpn"
+echo -e "${cor[2]} [4] > ${cor[3]}SSL TUNNEL $stunel"
+echo -e "${cor[2]} [5] > ${cor[3]}SHADOW SOCKS $shadow"
+echo -e "${cor[2]} [6] > ${cor[3]}PROXY SOCKS $socks"
+echo -e "${cor[2]} [7] > ${cor[3]}PROXY GETTUNEL $gettun"
+echo -e "${cor[2]} [8] > ${cor[3]}TCP OVER BYPASS $tcpbypass"
+echo -e "${cor[2]} [9] > ${cor[3]}TELEGRAM MANAGER BOT $telegran"
+echo -e "${cor[2]} [10] > ${cor[3]}WEBMIN $webminn"
+echo -e "${cor[2]} [11] > ${cor[3]}Anti-DDOS $ddos"
+echo -e "$barra"
+echo -ne "\033[1;37m ${txt[338]}: "
+read optons
+case $optons in
+1)
+fun_squid
+read -p " Enter";;
+2)
+fun_dropbear
+read -p " Enter";;
+3)
+fun_openvpn
+read -p " Enter";;
+4)
+ssl_stunel
+read -p " Enter";;
+5)
+fun_shadowsocks
+read -p " Enter";;
+6)
+iniciarsocks
+read -p " Enter";;
+7)
+gettunel_fun
+read -p " Enter";;
+8)
+tcpbypass_fun
+read -p " Enter";;
+9)
+telegran_bot
+read -p " Enter";;
+10)
+web_min
+read -p " Enter";;
+11)
+antiddos
+read -p " Enter";;
+esac
+
+#Reinicia ADM
+menu
